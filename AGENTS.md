@@ -29,6 +29,7 @@ React Native + Expo + TypeScript gym workout companion app. See `.agents_tmp/PLA
 - **expo-linking**: not auto-installed; `npx expo install expo-linking` (peer of expo-router).
 - **expo-file-system v57**: new OO API (`File`, `Directory`, `Paths`); legacy `documentDirectory`/`writeAsStringAsync` live under `expo-file-system/legacy`. Import from there for the classic API.
 - **lucide-react-native color prop**: typed via augmentation `src/types/lucide.d.ts` (LucideProps extends SvgProps). When passing a `ColorValue` (e.g. from tabBarIcon), cast `color as string` since ColorValue allows null.
+- **App asset PNGs MUST be real images**: `assets/{icon,adaptive-icon,splash,favicon}.png` must be valid non-interlaced PNGs with a proper IHDR chunk + pixel data. An 8-byte signature-only stub will crash `expo prebuild` (jimp-compact fails reading `interlace` from missing IHDR). Note: `expo export` (Metro bundle) does NOT catch this — only `expo prebuild` exercises the native image pipeline. Generated current assets with a stdlib-only Python encoder (zlib/struct): interlace=0, colortype 6 (RGBA).
 
 ## Path alias
 `@/*` → `src/*` (configured in tsconfig.json and babel.config.js).
