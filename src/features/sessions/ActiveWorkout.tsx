@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TextInput, Pressable, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Check, ChevronLeft, Info, AlertTriangle, Heart } from 'lucide-react-native';
+import { Check, ChevronLeft, Info, AlertTriangle, Heart, Repeat } from 'lucide-react-native';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { useHistoryStore } from '@/stores/useHistoryStore';
 import { useProgramStore } from '@/stores/useProgramStore';
@@ -28,12 +28,20 @@ export default function ActiveWorkout() {
   const [prevPerf, setPrevPerf] = useState<SetLogRecord[]>([]);
   const [weight, setWeight] = useState('');
   const [reps, setReps] = useState('');
+  const [rpe, setRpe] = useState('');
   const [showWaiting, setShowWaiting] = useState(false);
   const [confirmSkip, setConfirmSkip] = useState(false);
   const [gateDismissed, setGateDismissed] = useState(false);
+  const [showSubstitute, setShowSubstitute] = useState(false);
+  const [cardioDuration, setCardioDuration] = useState('');
+  const [cardioDistance, setCardioDistance] = useState('');
 
   const item = session ? session.items[session.currentItemIndex] : null;
   const exercise = item?.exerciseId ? program?.exercises.find((e) => e.id === item.exerciseId) : undefined;
+  const plannedExercise = item?.plannedExerciseId
+    ? program?.exercises.find((e) => e.id === item.plannedExerciseId)
+    : undefined;
+  const isSubstituted = !!item?.plannedExerciseId && item.plannedExerciseId !== item.exerciseId;
 
   useEffect(() => {
     const unsub = timer.subscribe((r) => setRestRemaining(r));
@@ -56,13 +64,19 @@ export default function ActiveWorkout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.state, session?.restEndsAt]);
 
-  // Load previous performance for the current exercise.
+  // Load previous performance for the current exercise + reset per-item inputs.
   useEffect(() => {
     if (item?.exerciseId) {
       previousPerformance(item.exerciseId).then(setPrevPerf);
-      setWeight(''); setReps('');
+    } else {
+      setPrevPerf([]);
     }
-  }, [item?.exerciseId, previousPerformance]);
+    setWeight('');
+    setReps('');
+    setRpe('');
+    setCardioDuration('');
+    setCardioDistance('');
+  }, [item?.exerciseId, item?.id, previousPerformance]);
 
   // Reset gate dismissal when the current item changes.
   useEffect(() => { setGateDismissed(false); }, [session?.currentItemIndex]);
@@ -85,12 +99,24 @@ export default function ActiveWorkout() {
   const onCompleteSet = () => {
     const repsNum = parseInt(reps || (item.plannedSets[session.currentSetIndex]?.reps as string) || '0', 10) || 0;
     const wNum = weight ? parseFloat(weight) : undefined;
-    dispatch({ type: 'COMPLETE_SET', reps: repsNum, weight: wNum });
-    setWeight(''); setReps('');
+    const rpeNum = rpe ? parseInt(rpe, 10) : undefined;
+    dispatch({ type: 'COMPLETE_SET', reps: repsNum, weight: wNum, rpe: rpeNum });
+    setWeight(''); setReps(''); setRpe('');
   };
 
   const onCardioComplete = () => {
-    dispatch({ type: 'COMPLETE_CARDIO', actual: { actualDurationMin: item.cardio?.durationMin } });
+    const actual = {
+      actualDurationMin: cardioDuration ? parseFloat(cardioDuration) : item.cardio?.durationMin,
+      actualDistance: cardioDistance ? parseFloat(cardioDistance) : undefined,
+    };
+    dispatch({ type: 'COMPLETE_CARDIO', actual });
+  };
+
+  const onSubstitute = (performedExerciseId: string) => {
+    const planned = item.plannedExerciseId ?? item.exerciseId ?? '';
+    dispatch({ type: 'SUBSTITUTE_EXERCISE', exerciseId: planned, performedExerciseId });
+    setShowSubstitute(false);
+    setGateDismissed(false);
   };
 
   const skipRest = () => { dispatch({ type: 'SKIP_REST' }); };
@@ -127,11 +153,18 @@ export default function ActiveWorkout() {
         )}
 
         {/* Progress */}
-        {!isCardio && (
+        {!isCardio ? (
           <Card>
             <View style={styles.rowBetween}>
               <Text style={styles.h3}>Set {session.currentSetIndex + 1} of {item.plannedSets.length}</Text>
               {item.completedSets.length > 0 && <Pill text={`${item.completedSets.length} done`} color={AppColors.success} />}
+            </View>
+          </Card>
+        ) : (
+          <Card>
+            <View style={styles.rowBetween}>
+              <Text style={styles.h3}>Cardio</Text>
+              {item.cardio?.durationMin && <Pill text={`Planned ${item.cardio.durationMin} min`} color={AppColors.danger} />}
             </View>
           </Card>
         )}
@@ -142,6 +175,12 @@ export default function ActiveWorkout() {
             <Text style={[styles.title, { fontSize: 26, flex: 1 }]}>{exercise?.name ?? item.label ?? 'Exercise'}</Text>
             {exercise && <Pressable onPress={() => setShowInfo(true)}><Info size={22} color={AppColors.primary} /></Pressable>}
           </View>
+          {isSubstituted && plannedExercise && (
+            <View style={[styles.row, { gap: 6, marginBottom: 6 }]}>
+              <Pill text={`Planned: ${plannedExercise.name}`} color={AppColors.warning} />
+              <Pill text={`Performed: ${exercise?.name ?? item.exerciseId}`} color={AppColors.success} />
+            </View>
+          )}
           {exercise?.targetMuscles && (
             <View style={[styles.row, { flexWrap: 'wrap', gap: 6, marginBottom: 6 }]}>
               {exercise.targetMuscles.map((m) => <Pill key={m} text={m} />)}
@@ -159,7 +198,14 @@ export default function ActiveWorkout() {
           )}
 
           {isCardio ? (
-            <CardioView item={item} onComplete={onCardioComplete} />
+            <CardioView
+              item={item}
+              duration={cardioDuration}
+              distance={cardioDistance}
+              onDuration={setCardioDuration}
+              onDistance={setCardioDistance}
+              onComplete={onCardioComplete}
+            />
           ) : (
             <View>
               {/* Set list */}
@@ -179,21 +225,26 @@ export default function ActiveWorkout() {
               {showEquipmentGate ? (
                 <EquipmentGate
                   equipment={exercise!.equipment!}
+                  canSubstitute={hasAlternatives(exercise)}
                   onAvailable={() => setGateDismissed(true)}
                   onUnavailable={(reason) => dispatch({ type: 'MARK_EQUIPMENT_UNAVAILABLE', reason })}
                   onSkip={() => setConfirmSkip(true)}
+                  onChooseAlternative={() => setShowSubstitute(true)}
                 />
               ) : (
                 <View>
                   <View style={[styles.row, { gap: 10, marginBottom: 12 }]}>
                     <TextInput style={styles.input} placeholder="Weight (kg)" placeholderTextColor={AppColors.textMuted} keyboardType="numeric" value={weight} onChangeText={setWeight} />
                     <TextInput style={styles.input} placeholder="Reps" placeholderTextColor={AppColors.textMuted} keyboardType="numeric" value={reps} onChangeText={setReps} />
+                    <TextInput style={[styles.input, { flex: 0.7 }]} placeholder="RPE" placeholderTextColor={AppColors.textMuted} keyboardType="numeric" value={rpe} onChangeText={setRpe} />
                   </View>
                   <PrimaryButton label="Complete Set" onPress={onCompleteSet} />
                   <View style={{ height: 10 }} />
                   <View style={[styles.row, { gap: 10 }]}>
                     <View style={{ flex: 1 }}><SecondaryButton label="Skip Exercise" onPress={() => setConfirmSkip(true)} /></View>
-                    <View style={{ flex: 1 }}><SecondaryButton label="Substitute" onPress={() => setShowInfo(true)} /></View>
+                    {hasAlternatives(exercise) ? (
+                      <View style={{ flex: 1 }}><SecondaryButton label="Substitute" onPress={() => setShowSubstitute(true)} /></View>
+                    ) : <View style={{ flex: 1 }} />}
                   </View>
                 </View>
               )}
@@ -255,35 +306,144 @@ export default function ActiveWorkout() {
           </View>
         </View>
       </Modal>
+
+      {/* Substitute exercise sheet */}
+      <Modal visible={showSubstitute} animationType="slide" transparent>
+        <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <View style={{ backgroundColor: AppColors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '85%' }}>
+            <SubstituteSheet
+              plannedName={plannedExercise?.name ?? exercise?.name ?? item.label ?? 'Exercise'}
+              alternatives={resolveAlternatives(exercise, program?.exercises ?? [])}
+              onPick={onSubstitute}
+              onClose={() => setShowSubstitute(false)}
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
-function CardioView({ item, onComplete }: { item: SessionItem; onComplete: () => void }) {
+function CardioView({ item, duration, distance, onDuration, onDistance, onComplete }: {
+  item: SessionItem;
+  duration: string;
+  distance: string;
+  onDuration: (v: string) => void;
+  onDistance: (v: string) => void;
+  onComplete: () => void;
+}) {
   const c = item.cardio;
   return (
     <View style={{ marginVertical: 8 }}>
       <View style={styles.rowBetween}>
         <View style={styles.row}><Heart size={18} color={AppColors.danger} /><Text style={[styles.body, { marginLeft: 8 }]}>{c?.cardioType}</Text></View>
       </View>
-      <Text style={styles.muted}>Planned: {c?.durationMin ? `${c?.durationMin} min` : ''} {c?.distance ? `· ${c?.distance} km` : ''} {c?.intensity ? `· ${c?.intensity}` : ''}</Text>
+      <Text style={styles.muted}>
+        Planned: {c?.durationMin ? `${c.durationMin} min` : ''} {c?.distance ? `· ${c.distance} km` : ''} {c?.intensity ? `· ${c.intensity}` : ''}
+      </Text>
+      {c?.incline != null && <Text style={styles.muted}>Incline: {c.incline}%</Text>}
+      {c?.speed != null && <Text style={styles.muted}>Speed: {c.speed} km/h</Text>}
       {c?.notes ? <Text style={styles.muted}>{c.notes}</Text> : null}
+
+      <Text style={[styles.h3, { marginTop: 12 }]}>Record actuals</Text>
+      <View style={[styles.row, { gap: 10, marginVertical: 8 }]}>
+        <TextInput
+          style={styles.input}
+          placeholder={c?.durationMin ? `Duration (${c.durationMin} min)` : 'Duration (min)'}
+          placeholderTextColor={AppColors.textMuted}
+          keyboardType="numeric"
+          value={duration}
+          onChangeText={onDuration}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder={c?.distance ? `Distance (${c.distance} km)` : 'Distance (km)'}
+          placeholderTextColor={AppColors.textMuted}
+          keyboardType="numeric"
+          value={distance}
+          onChangeText={onDistance}
+        />
+      </View>
       <View style={{ height: 12 }} />
       <PrimaryButton label="Complete Cardio" onPress={onComplete} />
     </View>
   );
 }
 
-function EquipmentGate({ equipment, onAvailable, onUnavailable, onSkip }: { equipment: string; onAvailable: () => void; onUnavailable: (reason?: string) => void; onSkip: () => void }) {
+function EquipmentGate({ equipment, canSubstitute, onAvailable, onUnavailable, onSkip, onChooseAlternative }: {
+  equipment: string;
+  canSubstitute: boolean;
+  onAvailable: () => void;
+  onUnavailable: (reason?: string) => void;
+  onSkip: () => void;
+  onChooseAlternative: () => void;
+}) {
   return (
     <View style={{ marginVertical: 8 }}>
-      <Text style={styles.body}>Equipment needed: <Text style={{ fontWeight: '700' }}>{equipment}</Text></Text>
+      <Text style={styles.body}>Is the <Text style={{ fontWeight: '700' }}>{equipment}</Text> available?</Text>
       <View style={{ height: 12 }} />
-      <PrimaryButton label="Equipment Available" onPress={onAvailable} />
+      <PrimaryButton label="Available" onPress={onAvailable} />
       <View style={{ height: 10 }} />
-      <SecondaryButton label="Equipment Occupied" onPress={() => onUnavailable('Equipment occupied')} />
+      <SecondaryButton label="Occupied — Skip for Now" onPress={() => onUnavailable('Equipment occupied')} />
+      {canSubstitute && (
+        <>
+          <View style={{ height: 10 }} />
+          <SecondaryButton label="Choose Alternative" onPress={onChooseAlternative} />
+        </>
+      )}
       <View style={{ height: 10 }} />
-      <SecondaryButton label="Skip for Now" onPress={onSkip} />
+      <SecondaryButton label="Skip Exercise" onPress={onSkip} />
+    </View>
+  );
+}
+
+/** Resolve an exercise's `alternatives` ids to metadata objects. */
+function resolveAlternatives(exercise: ExerciseMeta | undefined, library: ExerciseMeta[]): ExerciseMeta[] {
+  const ids = exercise?.alternatives ?? [];
+  return ids.map((id) => library.find((e) => e.id === id)).filter((e): e is ExerciseMeta => !!e);
+}
+
+function hasAlternatives(exercise: ExerciseMeta | undefined): boolean {
+  return !!exercise?.alternatives && exercise.alternatives.length > 0;
+}
+
+function SubstituteSheet({ plannedName, alternatives, onPick, onClose }: {
+  plannedName: string;
+  alternatives: ExerciseMeta[];
+  onPick: (performedExerciseId: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <View>
+      <View style={styles.rowBetween}>
+        <Text style={styles.h2}>Substitute Exercise</Text>
+        <Pressable onPress={onClose}><ChevronLeft size={24} color={AppColors.textMuted} /></Pressable>
+      </View>
+      <Text style={[styles.muted, { marginVertical: 8 }]}>
+        Planned: <Text style={{ fontWeight: '700', color: AppColors.text }}>{plannedName}</Text>. Choose an alternative — the substitution is recorded for this session only and never edits your program.
+      </Text>
+      {alternatives.length === 0 ? (
+        <Text style={styles.body}>No alternatives defined for this exercise.</Text>
+      ) : (
+        alternatives.map((alt) => (
+          <Card key={alt.id}>
+            <View style={[styles.rowBetween, { marginBottom: 4 }]}>
+              <Text style={styles.h3}>{alt.name}</Text>
+              <Repeat size={18} color={AppColors.primary} />
+            </View>
+            {alt.equipment && <Text style={styles.muted}>{alt.equipment}</Text>}
+            {alt.targetMuscles && alt.targetMuscles.length > 0 && (
+              <View style={[styles.row, { flexWrap: 'wrap', gap: 6, marginTop: 6 }]}>
+                {alt.targetMuscles.map((m) => <Pill key={m} text={m} />)}
+              </View>
+            )}
+            <View style={{ height: 10 }} />
+            <PrimaryButton label="Use This" onPress={() => onPick(alt.id)} />
+          </Card>
+        ))
+      )}
+      <View style={{ height: 8 }} />
+      <SecondaryButton label="Cancel" onPress={onClose} />
     </View>
   );
 }

@@ -27,6 +27,7 @@ function expandItem(item: WorkoutItem): SessionItem[] {
         id: item.id ?? genId('item'),
         kind: 'exercise',
         exerciseId: item.exerciseId,
+        plannedExerciseId: item.exerciseId,
         status: 'pending',
         plannedSets: item.sets,
         restSec: item.restSec,
@@ -58,6 +59,7 @@ function expandItem(item: WorkoutItem): SessionItem[] {
         id: `${item.id}-r${round}-e${i}`,
         kind: 'exercise',
         exerciseId: ex.exerciseId,
+        plannedExerciseId: ex.exerciseId,
         label: `${item.name ?? 'Superset'} · Round ${round}`,
         status: 'pending',
         plannedSets: ex.sets,
@@ -263,10 +265,12 @@ export function reduce(session: Session, action: SessionAction): Session {
     }
 
     case 'SUBSTITUTE_EXERCISE': {
-      const item = s.items.find((i) => i.id === s.items[s.currentItemIndex]?.id);
-      if (!item) return s;
+      const item = s.items[s.currentItemIndex];
+      if (!item || item.kind !== 'exercise') return s;
+      const planned = item.plannedExerciseId ?? item.exerciseId ?? action.exerciseId;
+      if (!item.plannedExerciseId) item.plannedExerciseId = planned;
       item.exerciseId = action.performedExerciseId;
-      s.substitutions[action.exerciseId] = action.performedExerciseId;
+      s.substitutions[planned] = action.performedExerciseId;
       return s;
     }
 

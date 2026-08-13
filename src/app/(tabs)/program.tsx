@@ -68,7 +68,18 @@ export default function ProgramScreen() {
       <Text style={styles.title}>{program.program.name}</Text>
       {program.program.description ? <Text style={styles.muted}>{program.program.description}</Text> : null}
 
-      <Text style={[styles.h2, { marginTop: 12 }]}>Weekly Schedule</Text>
+      <View style={{ height: 16 }} />
+      <View style={[styles.row, { gap: 12 }]}>
+        <View style={{ flex: 1 }}>
+          <PrimaryButton label="Import JSON" onPress={doImport} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <SecondaryButton label={busy ? 'Working…' : 'Export JSON'} onPress={doExport} />
+        </View>
+      </View>
+      <Text style={[styles.muted, { marginTop: 8 }]}>Import a program from a .json file, or export the current one. Export never includes your workout history.</Text>
+
+      <Text style={[styles.h2, { marginTop: 16 }]}>Weekly Schedule</Text>
       <Card>
         <View style={[styles.row, { justifyContent: 'space-between' }]}>
           {DAYS_OF_WEEK.map((d) => {
@@ -95,17 +106,7 @@ export default function ProgramScreen() {
       <View style={[styles.row, { flexWrap: 'wrap', gap: 6 }]}>
         {program.exercises.map((e) => <Pill key={e.id} text={e.name} />)}
       </View>
-
-      <Text style={[styles.h2, { marginTop: 16 }]}>Import / Export</Text>
-      <View style={[styles.row, { gap: 12 }]}>
-        <View style={{ flex: 1 }}>
-          <SecondaryButton label="Import JSON" onPress={doImport} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <SecondaryButton label={busy ? 'Working…' : 'Export JSON'} onPress={doExport} />
-        </View>
-      </View>
-      <Text style={[styles.muted, { marginTop: 8 }]}>Export never includes your workout history.</Text>
+      <View style={{ height: 24 }} />
     </ScrollView>
   );
 }
