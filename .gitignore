@@ -1,0 +1,27 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# expo
+/.expo/*
+/dist
+/web-build
+expo-env.d.ts
+
+# misc
+.DS_Store
+*.local
+.env*
+.eslintcache
+
+# editor
+.vscode/*
+.idea/*
+
+# tests
+/coverage
+
+# agent tmp
+/agents_tmp
+.agents_tmp
