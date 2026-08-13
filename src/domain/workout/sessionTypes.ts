@@ -43,8 +43,12 @@ export interface SessionItem {
   /** Stable id within the session (workoutItemId or superset-exercise composite). */
   id: string;
   kind: 'exercise' | 'superset' | 'cardio';
-  /** Reference back to the parent workout item (or sub-exercise). */
+  /** Reference back to the parent workout item (or sub-exercise).
+   *  For substituted exercises this is the *performed* id; the original is
+   *  retained in `plannedExerciseId`. */
   exerciseId?: string;
+  /** Original planned exercise id, set when a substitution occurred (§14). */
+  plannedExerciseId?: string;
   label?: string;
   status: SessionItemStatus;
   /** Planned sets (from program, immutable). */

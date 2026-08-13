@@ -103,6 +103,16 @@ describe('WorkoutEngine', () => {
     expect(s.substitutions['bench']).toBe('db-bench');
   });
 
+  it('substituteExercise retains plannedExerciseId after substitution', () => {
+    let s = startSession('prog', workout);
+    expect(s.items[0].plannedExerciseId).toBe('bench');
+    s = reduce(s, { type: 'SUBSTITUTE_EXERCISE', exerciseId: 'bench', performedExerciseId: 'db-bench' });
+    expect(s.items[0].plannedExerciseId).toBe('bench');
+    expect(s.items[0].exerciseId).toBe('db-bench');
+    // The original program's bench item is untouched (session ≠ program).
+    expect(workout.items[0]).toEqual(workout.items[0]);
+  });
+
   it('cardio completion records actuals', () => {
     let s = startSession('prog', workout);
     // advance to cardio (last item) by skipping everything else

@@ -1,7 +1,7 @@
 import { View, Text, ScrollView, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Calendar, Plus, History as HistoryIcon, Dumbbell, Clock, ChevronRight } from 'lucide-react-native';
+import { Calendar, Plus, History as HistoryIcon, Dumbbell, Clock, ChevronRight, ListChecks } from 'lucide-react-native';
 import { useProgramStore } from '@/stores/useProgramStore';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { getTodayWorkout, getTodayISO, getDayKey, friendlyDate } from '@/lib/datetime';
@@ -123,6 +123,15 @@ export default function Dashboard() {
           <View style={styles.row}>
             <HistoryIcon size={20} color={AppColors.primary} />
             <Text style={[styles.h3, { marginLeft: 12 }]}>Workout History</Text>
+          </View>
+          <ChevronRight size={20} color={AppColors.textMuted} />
+        </View>
+      </Pressable>
+      <Pressable style={styles.card} onPress={() => router.push('/(tabs)/program')}>
+        <View style={styles.rowBetween}>
+          <View style={styles.row}>
+            <ListChecks size={20} color={AppColors.primary} />
+            <Text style={[styles.h3, { marginLeft: 12 }]}>Program & Import JSON</Text>
           </View>
           <ChevronRight size={20} color={AppColors.textMuted} />
         </View>
