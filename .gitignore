@@ -25,3 +25,4 @@ expo-env.d.ts
 # agent tmp
 /agents_tmp
 .agents_tmp
+/android
