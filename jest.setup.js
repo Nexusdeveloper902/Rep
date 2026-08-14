@@ -15,6 +15,14 @@ jest.mock('expo-file-system', () => ({
   deleteAsync: jest.fn(),
 }));
 
+jest.mock('expo-file-system/legacy', () => ({
+  documentDirectory: '/mock/',
+  writeAsStringAsync: jest.fn(),
+  readAsStringAsync: jest.fn(),
+  deleteAsync: jest.fn(),
+  EncodingType: { UTF8: 'utf8' },
+}));
+
 jest.mock('expo-document-picker', () => ({
   getDocumentAsync: jest.fn(),
 }));
