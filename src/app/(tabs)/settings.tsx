@@ -1,11 +1,12 @@
-import { Alert } from 'react-native';
+import { Alert, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { usePreferencesStore } from '@/stores/usePreferencesStore';
 import { useSessionStore } from '@/stores/useSessionStore';
-import { Card, SecondaryButton, DangerButton } from '@/components/ui';
+import { useHistoryStore } from '@/stores/useHistoryStore';
+import { Card, SecondaryButton, DangerButton, PrimaryButton } from '@/components/ui';
 import { styles } from '@/components/styles';
-import { ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text } from 'react-native';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -15,12 +16,31 @@ export default function SettingsScreen() {
   const setDiscardConfirm = usePreferencesStore((s) => s.setDiscardConfirm);
   const session = useSessionStore((s) => s.session);
   const discardActive = useSessionStore((s) => s.discardActive);
+  const wipeHistory = useHistoryStore((s) => s.wipeHistory);
 
   const discardActiveSession = () => {
     Alert.alert('Discard active workout?', 'This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Discard', style: 'destructive', onPress: async () => { await discardActive(); router.replace('/(tabs)'); } },
     ]);
+  };
+
+  const wipeData = () => {
+    Alert.alert(
+      'Wipe all workout data?',
+      'This permanently deletes every session, set log, and cardio log. Your current program JSON is kept. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Wipe',
+          style: 'destructive',
+          onPress: async () => {
+            await wipeHistory();
+            Alert.alert('Done', 'All workout history has been wiped. Your program is unchanged.');
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -47,6 +67,13 @@ export default function SettingsScreen() {
         <SecondaryButton label={discardConfirm ? 'Turn Off' : 'Turn On'} onPress={() => setDiscardConfirm(!discardConfirm)} />
       </Card>
 
+      <Text style={[styles.h2, { marginTop: 12 }]}>Data</Text>
+      <Card>
+        <Text style={styles.body}>Wipe workout history</Text>
+        <Text style={[styles.muted, { marginVertical: 8 }]}>Deletes all sessions, set logs, and cardio logs. Keeps your current program JSON.</Text>
+        <DangerButton label="Wipe Data" onPress={wipeData} />
+      </Card>
+
       {session && (session.state === 'Active' || session.state === 'Resting' || session.state === 'WaitingForEquipment' || session.state === 'Paused') && (
         <>
           <Text style={[styles.h2, { marginTop: 12 }]}>Active Session</Text>
@@ -64,6 +91,8 @@ export default function SettingsScreen() {
         <Text style={styles.muted}>Version 1.0.0</Text>
         <Text style={[styles.muted, { marginTop: 8 }]}>All data is stored locally on your device. No account, no cloud, no sync.</Text>
       </Card>
+      <View style={{ height: 12 }} />
+      <PrimaryButton label="Back to Home" onPress={() => router.replace('/(tabs)')} />
     </ScrollView>
   );
 }

@@ -6,9 +6,11 @@ const KEYS = {
   discardConfirm: 'pref.discardConfirm',
 } as const;
 
+export type Units = 'kg' | 'lb';
+
 export interface PreferencesData {
   onboardingDone: boolean;
-  units: 'kg' | 'lb';
+  units: Units;
   discardConfirm: boolean;
 }
 

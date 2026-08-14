@@ -15,6 +15,7 @@ export function useAppBootstrap(): void {
   const seedSample = useProgramStore((s) => s.seedSampleIfEmpty);
   const loadActive = useSessionStore((s) => s.loadActive);
   const loadHistory = useHistoryStore((s) => s.loadHistory);
+  const loadStats = useHistoryStore((s) => s.loadStats);
 
   useEffect(() => {
     (async () => {
@@ -24,7 +25,7 @@ export function useAppBootstrap(): void {
       }
       await Promise.all([loadPreferences(), loadProgram()]);
       await seedSample();
-      await Promise.all([loadActive(), loadHistory()]);
+      await Promise.all([loadActive(), loadHistory(), loadStats()]);
     })();
-  }, [loadPreferences, loadProgram, seedSample, loadActive, loadHistory]);
+  }, [loadPreferences, loadProgram, seedSample, loadActive, loadHistory, loadStats]);
 }

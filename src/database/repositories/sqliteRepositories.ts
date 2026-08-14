@@ -1,7 +1,8 @@
 import * as SQLite from 'expo-sqlite';
 import type { ProgramDocument } from '@/domain/program/schema';
 import type { Session, SessionItem, WorkoutSummary } from '@/domain/workout/sessionTypes';
-import type { IProgramRepository, ISessionRepository, SessionRecord, SetLogRecord } from './types';
+import { computeStats } from '@/domain/workout/stats';
+import type { IProgramRepository, ISessionRepository, SessionRecord, SetLogRecord, WorkoutStats } from './types';
 import { SCHEMA_SQL } from '@/database/schema';
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -143,5 +144,42 @@ export class SQLiteSessionRepository implements ISessionRepository {
     return rows.map((r) => ({
       sessionId: r.session_id, exerciseId: r.exercise_id, setIndex: r.set_index, weight: r.weight ?? undefined, reps: r.reps, rpe: r.rpe ?? undefined, notes: r.notes ?? undefined, timestamp: r.timestamp,
     }));
+  }
+  async bestSet(exerciseId: string): Promise<SetLogRecord | null> {
+    const db = await getDb();
+    const rows = await db.getAllAsync<any>(
+      `SELECT l.* FROM set_logs l JOIN sessions s ON s.id = l.session_id
+       WHERE l.exercise_id = ? AND s.state = 'WorkoutComplete' AND l.weight IS NOT NULL
+       ORDER BY (l.weight * (1 + l.reps / 30.0)) DESC LIMIT 1`,
+      exerciseId,
+    );
+    if (rows.length === 0) return null;
+    const r = rows[0];
+    return { sessionId: r.session_id, exerciseId: r.exercise_id, setIndex: r.set_index, weight: r.weight ?? undefined, reps: r.reps, rpe: r.rpe ?? undefined, notes: r.notes ?? undefined, timestamp: r.timestamp };
+  }
+  async stats(): Promise<WorkoutStats> {
+    const db = await getDb();
+    const records: SessionRecord[] = (await db.getAllAsync<any>("SELECT * FROM sessions WHERE state IN ('WorkoutComplete','Discarded') ORDER BY start_time DESC")).map((r) => ({
+      id: r.id, programId: r.program_id, workoutId: r.workout_id, isExtra: r.is_extra === 1, label: r.label, date: r.date_iso, startTime: r.start_time, endTime: r.end_time ?? undefined, state: r.state, summary: r.summary_json ? JSON.parse(r.summary_json) : undefined,
+    }));
+    const setRows = await db.getAllAsync<any>(`SELECT l.* FROM set_logs l JOIN sessions s ON s.id = l.session_id WHERE s.state = 'WorkoutComplete'`);
+    const allLogs: SetLogRecord[] = setRows.map((r) => ({
+      sessionId: r.session_id, exerciseId: r.exercise_id, setIndex: r.set_index, weight: r.weight ?? undefined, reps: r.reps, rpe: r.rpe ?? undefined, notes: r.notes ?? undefined, timestamp: r.timestamp,
+    }));
+    // Cardio minutes: sum actual durations from cardio_logs of completed sessions.
+    const cardioRow = await db.getAllAsync<{ total: number | null }>(
+      `SELECT COALESCE(SUM(c.duration_min), 0) as total FROM cardio_logs c JOIN sessions s ON s.id = c.session_id WHERE s.state = 'WorkoutComplete'`,
+    );
+    const cardioMin = cardioRow[0]?.total ?? 0;
+    return computeStats(records, allLogs, cardioMin);
+  }
+  async wipeHistory(): Promise<void> {
+    const db = await getDb();
+    // session_state / set_logs / cardio_logs cascade-delete with sessions.
+    await db.runAsync('DELETE FROM session_state');
+    await db.runAsync('DELETE FROM set_logs');
+    await db.runAsync('DELETE FROM cardio_logs');
+    await db.runAsync('DELETE FROM sessions');
+    // programs table is intentionally untouched — wipe keeps the current program JSON.
   }
 }
