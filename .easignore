@@ -1,0 +1,14 @@
+node_modules
+__tests__
+__mocks__
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+jest.config.js
+jest.core.config.js
+jest.setup.js
+dist
+.agents_tmp
+.agents
+git
