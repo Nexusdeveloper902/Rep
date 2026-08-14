@@ -32,11 +32,33 @@
       "expo-router",
       [
         "expo-document-picker",
-        { "iCloudContainer": true, "UTType": ["public.json", "public.text"] }
+        {
+          "iCloudContainer": true,
+          "UTType": [
+            "public.json",
+            "public.text"
+          ]
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": false
-    }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/4ed9dedd-f0cd-40fb-8496-701a2d4b46ad",
+      "enabled": true,
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD"
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "4ed9dedd-f0cd-40fb-8496-701a2d4b46ad"
+      }
+    },
+    "owner": "geek_0.2"
   }
 }
