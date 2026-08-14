@@ -1,6 +1,7 @@
 import type { ProgramDocument } from '@/domain/program/schema';
 import type { Session, SessionItem, WorkoutSummary } from '@/domain/workout/sessionTypes';
-import type { IProgramRepository, ISessionRepository, SessionRecord, SetLogRecord } from './types';
+import { computeStats, bestSetFor } from '@/domain/workout/stats';
+import type { IProgramRepository, ISessionRepository, SessionRecord, SetLogRecord, WorkoutStats } from './types';
 
 /**
  * In-memory repository implementations. Used in tests and as the default in this
@@ -103,5 +104,32 @@ export class InMemorySessionRepository implements ISessionRepository {
       if (logs.length > 0) return logs;
     }
     return [];
+  }
+  async bestSet(exerciseId: string): Promise<SetLogRecord | null> {
+    const all: SetLogRecord[] = [];
+    for (const s of this.completed.values()) {
+      if (s.record.state !== 'WorkoutComplete') continue;
+      all.push(...s.setLogs.filter((l) => l.exerciseId === exerciseId));
+    }
+    return bestSetFor(all);
+  }
+  async stats(): Promise<WorkoutStats> {
+    const records = Array.from(this.completed.values()).map((c) => c.record);
+    const allLogs: SetLogRecord[] = [];
+    let cardioMin = 0;
+    for (const c of this.completed.values()) {
+      if (c.record.state !== 'WorkoutComplete') continue;
+      allLogs.push(...c.setLogs);
+      for (const item of c.items) {
+        if (item.kind === 'cardio' && item.cardioActual?.actualDurationMin) {
+          cardioMin += item.cardioActual.actualDurationMin;
+        }
+      }
+    }
+    return computeStats(records, allLogs, cardioMin);
+  }
+  async wipeHistory(): Promise<void> {
+    this.completed.clear();
+    this.active = null;
   }
 }

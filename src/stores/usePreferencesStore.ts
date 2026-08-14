@@ -1,12 +1,12 @@
 import { create } from 'zustand';
-import { PreferencesRepository, type PreferencesData } from '@/services/storage/preferencesRepository';
+import { PreferencesRepository, type PreferencesData, type Units } from '@/services/storage/preferencesRepository';
 
 const repo = new PreferencesRepository();
 
 interface PreferencesState extends PreferencesData {
   loaded: boolean;
   load: () => Promise<void>;
-  setUnits: (u: 'kg' | 'lb') => Promise<void>;
+  setUnits: (u: Units) => Promise<void>;
   completeOnboarding: () => Promise<void>;
   setDiscardConfirm: (v: boolean) => Promise<void>;
 }

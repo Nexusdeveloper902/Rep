@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TextInput, Pressable, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Check, ChevronLeft, Info, AlertTriangle, Heart, Repeat } from 'lucide-react-native';
+import { Check, ChevronLeft, Info, AlertTriangle, Heart, Repeat, Pause, Play } from 'lucide-react-native';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { useHistoryStore } from '@/stores/useHistoryStore';
 import { useProgramStore } from '@/stores/useProgramStore';
+import { usePreferencesStore } from '@/stores/usePreferencesStore';
 import { RestTimer } from '@/services/timers/RestTimer';
 import { formatClock } from '@/lib/datetime';
+import { formatWeight, parseWeightToKg, unitLabel } from '@/lib/units';
+import { est1rmKg } from '@/domain/workout/stats';
 import { Card, PrimaryButton, SecondaryButton, DangerButton, Pill } from '@/components/ui';
 import { styles, AppColors } from '@/components/styles';
 import type { SessionItem } from '@/domain/workout/sessionTypes';
@@ -22,13 +25,17 @@ export default function ActiveWorkout() {
   const dispatch = useSessionStore((s) => s.dispatch);
   const program = useProgramStore((s) => s.program);
   const previousPerformance = useHistoryStore((s) => s.previousPerformance);
+  const bestSet = useHistoryStore((s) => s.bestSet);
+  const units = usePreferencesStore((s) => s.units);
 
   const [restRemaining, setRestRemaining] = useState(0);
   const [showInfo, setShowInfo] = useState(false);
   const [prevPerf, setPrevPerf] = useState<SetLogRecord[]>([]);
+  const [prevBest, setPrevBest] = useState<SetLogRecord | null>(null);
   const [weight, setWeight] = useState('');
   const [reps, setReps] = useState('');
   const [rpe, setRpe] = useState('');
+  const [setNotes, setSetNotes] = useState('');
   const [showWaiting, setShowWaiting] = useState(false);
   const [confirmSkip, setConfirmSkip] = useState(false);
   const [gateDismissed, setGateDismissed] = useState(false);
@@ -64,19 +71,22 @@ export default function ActiveWorkout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.state, session?.restEndsAt]);
 
-  // Load previous performance for the current exercise + reset per-item inputs.
+  // Load previous performance + PR for the current exercise, reset per-item inputs.
   useEffect(() => {
     if (item?.exerciseId) {
       previousPerformance(item.exerciseId).then(setPrevPerf);
+      bestSet(item.exerciseId).then(setPrevBest);
     } else {
       setPrevPerf([]);
+      setPrevBest(null);
     }
     setWeight('');
     setReps('');
     setRpe('');
+    setSetNotes('');
     setCardioDuration('');
     setCardioDistance('');
-  }, [item?.exerciseId, item?.id, previousPerformance]);
+  }, [item?.exerciseId, item?.id, previousPerformance, bestSet]);
 
   // Reset gate dismissal when the current item changes.
   useEffect(() => { setGateDismissed(false); }, [session?.currentItemIndex]);
@@ -98,10 +108,10 @@ export default function ActiveWorkout() {
 
   const onCompleteSet = () => {
     const repsNum = parseInt(reps || (item.plannedSets[session.currentSetIndex]?.reps as string) || '0', 10) || 0;
-    const wNum = weight ? parseFloat(weight) : undefined;
+    const wNum = parseWeightToKg(weight, units);
     const rpeNum = rpe ? parseInt(rpe, 10) : undefined;
-    dispatch({ type: 'COMPLETE_SET', reps: repsNum, weight: wNum, rpe: rpeNum });
-    setWeight(''); setReps(''); setRpe('');
+    dispatch({ type: 'COMPLETE_SET', reps: repsNum, weight: wNum, rpe: rpeNum, notes: setNotes.trim() || undefined });
+    setWeight(''); setReps(''); setRpe(''); setSetNotes('');
   };
 
   const onCardioComplete = () => {
@@ -139,7 +149,11 @@ export default function ActiveWorkout() {
             <ChevronLeft size={26} color={AppColors.textMuted} />
           </Pressable>
           <Text style={styles.muted}>Exercise {completedExercises} of {totalExercises}</Text>
-          <View style={{ width: 26 }} />
+          {session.state === 'Paused' ? (
+            <Pressable onPress={() => dispatch({ type: 'RESUME' })}><Play size={24} color={AppColors.primary} /></Pressable>
+          ) : (
+            <Pressable onPress={() => dispatch({ type: 'PAUSE' })}><Pause size={24} color={AppColors.textMuted} /></Pressable>
+          )}
         </View>
         <Text style={styles.h2}>{session.label}</Text>
 
@@ -187,13 +201,19 @@ export default function ActiveWorkout() {
             </View>
           )}
 
-          {/* Previous performance (no fake data) */}
+          {/* Previous performance + PR (no fake data) */}
           {prevPerf.length > 0 && (
             <View style={{ marginVertical: 8 }}>
               <Text style={styles.muted}>Last time:</Text>
               <Text style={styles.body}>
-                {prevPerf.map((l, i) => `${l.weight ? `${l.weight}kg × ` : ''}${l.reps}`).join('  ·  ')}
+                {prevPerf.map((l, i) => `${l.weight ? `${formatWeight(l.weight, units)} × ` : ''}${l.reps}`).join('  ·  ')}
               </Text>
+            </View>
+          )}
+          {prevBest && prevBest.weight && (
+            <View style={[styles.row, { gap: 6, marginVertical: 6, flexWrap: 'wrap' }]}>
+              <Pill text={`PR ${formatWeight(prevBest.weight, units)} × ${prevBest.reps}`} color={AppColors.accent} />
+              <Pill text={`est 1RM ${formatWeight(est1rmKg(prevBest.weight, prevBest.reps), units)}`} color={AppColors.primary} />
             </View>
           )}
 
@@ -233,12 +253,25 @@ export default function ActiveWorkout() {
                 />
               ) : (
                 <View>
-                  <View style={[styles.row, { gap: 10, marginBottom: 12 }]}>
-                    <TextInput style={styles.input} placeholder="Weight (kg)" placeholderTextColor={AppColors.textMuted} keyboardType="numeric" value={weight} onChangeText={setWeight} />
+                  <View style={[styles.row, { gap: 10, marginBottom: 10 }]}>
+                    <TextInput style={styles.input} placeholder={`Weight (${unitLabel(units)})`} placeholderTextColor={AppColors.textMuted} keyboardType="numeric" value={weight} onChangeText={setWeight} />
                     <TextInput style={styles.input} placeholder="Reps" placeholderTextColor={AppColors.textMuted} keyboardType="numeric" value={reps} onChangeText={setReps} />
                     <TextInput style={[styles.input, { flex: 0.7 }]} placeholder="RPE" placeholderTextColor={AppColors.textMuted} keyboardType="numeric" value={rpe} onChangeText={setRpe} />
                   </View>
-                  <PrimaryButton label="Complete Set" onPress={onCompleteSet} />
+                  <TextInput
+                    style={[styles.input, { marginBottom: 12 }]}
+                    placeholder="Set notes (optional)"
+                    placeholderTextColor={AppColors.textMuted}
+                    value={setNotes}
+                    onChangeText={setSetNotes}
+                    multiline
+                  />
+                  {session.state === 'Paused' && (
+                    <PrimaryButton label="Resume Workout" onPress={() => dispatch({ type: 'RESUME' })} />
+                  )}
+                  {session.state !== 'Paused' && (
+                    <PrimaryButton label="Complete Set" onPress={onCompleteSet} />
+                  )}
                   <View style={{ height: 10 }} />
                   <View style={[styles.row, { gap: 10 }]}>
                     <View style={{ flex: 1 }}><SecondaryButton label="Skip Exercise" onPress={() => setConfirmSkip(true)} /></View>
@@ -265,6 +298,17 @@ export default function ActiveWorkout() {
           </Pressable>
         )}
       </ScrollView>
+
+      {/* Paused overlay */}
+      {session.state === 'Paused' && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(11,18,32,0.85)', justifyContent: 'center', alignItems: 'center', padding: 32 }}>
+          <Pause size={56} color={AppColors.primary} />
+          <Text style={[styles.title, { marginTop: 16 }]}>Paused</Text>
+          <Text style={[styles.muted, { marginTop: 8, textAlign: 'center' }]}>Your progress is saved. Resume whenever you're ready.</Text>
+          <View style={{ height: 20 }} />
+          <PrimaryButton label="Resume Workout" onPress={() => dispatch({ type: 'RESUME' })} />
+        </View>
+      )}
 
       {/* Rest overlay */}
       {session.state === 'Resting' && (
