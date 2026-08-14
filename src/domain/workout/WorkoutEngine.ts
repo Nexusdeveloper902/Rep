@@ -1,4 +1,4 @@
-import type { Workout, WorkoutItem } from '@/domain/program/schema';
+import type { Workout, WorkoutItem, SetMode } from '@/domain/program/schema';
 import type {
   Session,
   SessionItem,
@@ -22,6 +22,7 @@ function todayISODate(): string {
 
 function expandItem(item: WorkoutItem): SessionItem[] {
   if (item.type === 'exercise') {
+    const mode: SetMode = item.setMode ?? 'reps';
     return [
       {
         id: item.id ?? genId('item'),
@@ -32,6 +33,7 @@ function expandItem(item: WorkoutItem): SessionItem[] {
         plannedSets: item.sets,
         restSec: item.restSec,
         notes: item.notes,
+        setMode: mode,
         completedSets: [],
       } as SessionItem,
     ];
@@ -55,6 +57,7 @@ function expandItem(item: WorkoutItem): SessionItem[] {
   for (let round = 1; round <= item.rounds; round++) {
     for (let i = 0; i < item.exercises.length; i++) {
       const ex = item.exercises[i];
+      const mode: SetMode = ex.setMode ?? 'reps';
       items.push({
         id: `${item.id}-r${round}-e${i}`,
         kind: 'exercise',
@@ -68,6 +71,7 @@ function expandItem(item: WorkoutItem): SessionItem[] {
         supersetName: item.name,
         supersetRounds: item.rounds,
         supersetRound: round,
+        setMode: mode,
         completedSets: [],
       });
     }
@@ -163,7 +167,17 @@ function clone(session: Session): Session {
 function completeResistanceSet(
   s: Session,
   item: SessionItem,
-  payload: { weight?: number; reps: number; rpe?: number; notes?: string },
+  payload: {
+    weight?: number;
+    reps?: number;
+    rpe?: number;
+    notes?: string;
+    holdSec?: number;
+    distanceKm?: number;
+    loadKg?: number;
+    durationSec?: number;
+    eachSide?: boolean;
+  },
 ): Session {
   const setIndex = s.currentSetIndex;
   const completed: CompletedSet = {
@@ -172,6 +186,11 @@ function completeResistanceSet(
     reps: payload.reps,
     rpe: payload.rpe,
     notes: payload.notes,
+    holdSec: payload.holdSec,
+    distanceKm: payload.distanceKm,
+    loadKg: payload.loadKg,
+    durationSec: payload.durationSec,
+    eachSide: payload.eachSide,
     timestamp: Date.now(),
   };
   item.completedSets = [...item.completedSets, completed];

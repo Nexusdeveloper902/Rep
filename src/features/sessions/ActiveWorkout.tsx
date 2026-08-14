@@ -13,9 +13,10 @@ import { formatWeight, parseWeightToKg, unitLabel } from '@/lib/units';
 import { est1rmKg } from '@/domain/workout/stats';
 import { Card, PrimaryButton, SecondaryButton, DangerButton, Pill } from '@/components/ui';
 import { styles, AppColors } from '@/components/styles';
-import type { SessionItem } from '@/domain/workout/sessionTypes';
+import type { SessionItem, CompletedSet } from '@/domain/workout/sessionTypes';
 import type { SetLogRecord } from '@/database/repositories/types';
-import type { ExerciseMeta } from '@/domain/program/schema';
+import type { ExerciseMeta, SetMode, PlannedSet } from '@/domain/program/schema';
+import type { Units } from '@/services/storage/preferencesRepository';
 
 const timer = new RestTimer();
 
@@ -36,6 +37,11 @@ export default function ActiveWorkout() {
   const [reps, setReps] = useState('');
   const [rpe, setRpe] = useState('');
   const [setNotes, setSetNotes] = useState('');
+  const [holdSec, setHoldSec] = useState('');
+  const [loadKg, setLoadKg] = useState('');
+  const [distanceKm, setDistanceKm] = useState('');
+  const [durationSec, setDurationSec] = useState('');
+  const [eachSide, setEachSide] = useState(false);
   const [showWaiting, setShowWaiting] = useState(false);
   const [confirmSkip, setConfirmSkip] = useState(false);
   const [gateDismissed, setGateDismissed] = useState(false);
@@ -84,6 +90,11 @@ export default function ActiveWorkout() {
     setReps('');
     setRpe('');
     setSetNotes('');
+    setHoldSec('');
+    setLoadKg('');
+    setDistanceKm('');
+    setDurationSec('');
+    setEachSide(false);
     setCardioDuration('');
     setCardioDistance('');
   }, [item?.exerciseId, item?.id, previousPerformance, bestSet]);
@@ -105,13 +116,28 @@ export default function ActiveWorkout() {
   const completedExercises = session.items.filter((i) => i.kind === 'exercise' && i.status === 'completed').length;
   const isCardio = item.kind === 'cardio';
   const isSupersetSlot = !!item.supersetId;
+  const setMode = item.setMode ?? 'reps';
 
   const onCompleteSet = () => {
-    const repsNum = parseInt(reps || (item.plannedSets[session.currentSetIndex]?.reps as string) || '0', 10) || 0;
-    const wNum = parseWeightToKg(weight, units);
+    const notes = setNotes.trim() || undefined;
     const rpeNum = rpe ? parseInt(rpe, 10) : undefined;
-    dispatch({ type: 'COMPLETE_SET', reps: repsNum, weight: wNum, rpe: rpeNum, notes: setNotes.trim() || undefined });
-    setWeight(''); setReps(''); setRpe(''); setSetNotes('');
+    if (setMode === 'timed') {
+      const hold = parseInt(holdSec || String(item.plannedSets[session.currentSetIndex]?.holdSec ?? 0) || '0', 10) || 0;
+      const carried = parseWeightToKg(loadKg, units);
+      dispatch({ type: 'COMPLETE_SET', holdSec: hold, loadKg: carried, rpe: rpeNum, eachSide, notes });
+      setHoldSec(''); setLoadKg(''); setRpe(''); setSetNotes(''); setEachSide(false);
+    } else if (setMode === 'distance') {
+      const dist = parseFloat(distanceKm || String(item.plannedSets[session.currentSetIndex]?.distanceKm ?? 0) || '0') || 0;
+      const carried = parseWeightToKg(loadKg, units);
+      const dur = parseInt(durationSec || '0', 10) || undefined;
+      dispatch({ type: 'COMPLETE_SET', distanceKm: dist, loadKg: carried, durationSec: dur, rpe: rpeNum, notes });
+      setDistanceKm(''); setLoadKg(''); setDurationSec(''); setRpe(''); setSetNotes('');
+    } else {
+      const repsNum = parseInt(reps || (item.plannedSets[session.currentSetIndex]?.reps as string) || '0', 10) || 0;
+      const wNum = parseWeightToKg(weight, units);
+      dispatch({ type: 'COMPLETE_SET', reps: repsNum, weight: wNum, rpe: rpeNum, notes });
+      setWeight(''); setReps(''); setRpe(''); setSetNotes('');
+    }
   };
 
   const onCardioComplete = () => {
@@ -206,7 +232,7 @@ export default function ActiveWorkout() {
             <View style={{ marginVertical: 8 }}>
               <Text style={styles.muted}>Last time:</Text>
               <Text style={styles.body}>
-                {prevPerf.map((l, i) => `${l.weight ? `${formatWeight(l.weight, units)} × ` : ''}${l.reps}`).join('  ·  ')}
+                {prevPerf.map((l, i) => completedSetLabel(l, units)).join('  ·  ')}
               </Text>
             </View>
           )}
@@ -214,6 +240,11 @@ export default function ActiveWorkout() {
             <View style={[styles.row, { gap: 6, marginVertical: 6, flexWrap: 'wrap' }]}>
               <Pill text={`PR ${formatWeight(prevBest.weight, units)} × ${prevBest.reps}`} color={AppColors.accent} />
               <Pill text={`est 1RM ${formatWeight(est1rmKg(prevBest.weight, prevBest.reps), units)}`} color={AppColors.primary} />
+            </View>
+          )}
+          {setMode === 'timed' && prevPerf.length > 0 && prevPerf.some((l) => l.holdSec) && (
+            <View style={[styles.row, { gap: 6, marginVertical: 6, flexWrap: 'wrap' }]}>
+              <Pill text={`Best hold ${Math.max(...prevPerf.map((l) => l.holdSec ?? 0))}s`} color={AppColors.accent} />
             </View>
           )}
 
@@ -232,9 +263,10 @@ export default function ActiveWorkout() {
               <View style={{ marginVertical: 8 }}>
                 {item.plannedSets.map((s, i) => {
                   const done = i < item.completedSets.length;
+                  const label = plannedSetLabel(s, setMode);
                   return (
                     <View key={i} style={[styles.rowBetween, { paddingVertical: 6 }]}>
-                      <Text style={done ? styles.muted : styles.body}>Set {i + 1}: {s.reps} reps{s.rpe ? ` @ RPE ${s.rpe}` : ''}</Text>
+                      <Text style={done ? styles.muted : styles.body}>Set {i + 1}: {label}</Text>
                       {done && <Check size={18} color={AppColors.success} />}
                     </View>
                   );
@@ -253,11 +285,33 @@ export default function ActiveWorkout() {
                 />
               ) : (
                 <View>
-                  <View style={[styles.row, { gap: 10, marginBottom: 10 }]}>
-                    <TextInput style={styles.input} placeholder={`Weight (${unitLabel(units)})`} placeholderTextColor={AppColors.textMuted} keyboardType="numeric" value={weight} onChangeText={setWeight} />
-                    <TextInput style={styles.input} placeholder="Reps" placeholderTextColor={AppColors.textMuted} keyboardType="numeric" value={reps} onChangeText={setReps} />
-                    <TextInput style={[styles.input, { flex: 0.7 }]} placeholder="RPE" placeholderTextColor={AppColors.textMuted} keyboardType="numeric" value={rpe} onChangeText={setRpe} />
-                  </View>
+                  {setMode === 'timed' ? (
+                    <View>
+                      <View style={[styles.row, { gap: 10, marginBottom: 10 }]}>
+                        <TextInput style={styles.input} placeholder={plannedHint(item, session.currentSetIndex, 'holdSec', 'Hold (sec)')} placeholderTextColor={AppColors.textMuted} keyboardType="numeric" value={holdSec} onChangeText={setHoldSec} />
+                        <TextInput style={styles.input} placeholder={`Load (${unitLabel(units)})`} placeholderTextColor={AppColors.textMuted} keyboardType="numeric" value={loadKg} onChangeText={setLoadKg} />
+                        <TextInput style={[styles.input, { flex: 0.7 }]} placeholder="RPE" placeholderTextColor={AppColors.textMuted} keyboardType="numeric" value={rpe} onChangeText={setRpe} />
+                      </View>
+                      <Pressable style={[styles.row, { gap: 8, marginBottom: 10 }]} onPress={() => setEachSide((v) => !v)}>
+                        <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: eachSide ? AppColors.primary : AppColors.border, backgroundColor: eachSide ? AppColors.primary : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+                          {eachSide && <Check size={14} color="#fff" />}
+                        </View>
+                        <Text style={styles.muted}>Each side</Text>
+                      </Pressable>
+                    </View>
+                  ) : setMode === 'distance' ? (
+                    <View style={[styles.row, { gap: 10, marginBottom: 10 }]}>
+                      <TextInput style={styles.input} placeholder={plannedHint(item, session.currentSetIndex, 'distanceKm', 'Distance (km)')} placeholderTextColor={AppColors.textMuted} keyboardType="numeric" value={distanceKm} onChangeText={setDistanceKm} />
+                      <TextInput style={styles.input} placeholder={`Load (${unitLabel(units)})`} placeholderTextColor={AppColors.textMuted} keyboardType="numeric" value={loadKg} onChangeText={setLoadKg} />
+                      <TextInput style={styles.input} placeholder="Time (sec)" placeholderTextColor={AppColors.textMuted} keyboardType="numeric" value={durationSec} onChangeText={setDurationSec} />
+                    </View>
+                  ) : (
+                    <View style={[styles.row, { gap: 10, marginBottom: 10 }]}>
+                      <TextInput style={styles.input} placeholder={`Weight (${unitLabel(units)})`} placeholderTextColor={AppColors.textMuted} keyboardType="numeric" value={weight} onChangeText={setWeight} />
+                      <TextInput style={styles.input} placeholder={plannedHint(item, session.currentSetIndex, 'reps', 'Reps')} placeholderTextColor={AppColors.textMuted} keyboardType="numeric" value={reps} onChangeText={setReps} />
+                      <TextInput style={[styles.input, { flex: 0.7 }]} placeholder="RPE" placeholderTextColor={AppColors.textMuted} keyboardType="numeric" value={rpe} onChangeText={setRpe} />
+                    </View>
+                  )}
                   <TextInput
                     style={[styles.input, { marginBottom: 12 }]}
                     placeholder="Set notes (optional)"
@@ -270,7 +324,7 @@ export default function ActiveWorkout() {
                     <PrimaryButton label="Resume Workout" onPress={() => dispatch({ type: 'RESUME' })} />
                   )}
                   {session.state !== 'Paused' && (
-                    <PrimaryButton label="Complete Set" onPress={onCompleteSet} />
+                    <PrimaryButton label={setMode === 'timed' ? 'Complete Hold' : setMode === 'distance' ? 'Complete Set' : 'Complete Set'} onPress={onCompleteSet} />
                   )}
                   <View style={{ height: 10 }} />
                   <View style={[styles.row, { gap: 10 }]}>
@@ -573,4 +627,48 @@ function ExerciseInfoSheet({ exercise, onClose }: { exercise: ExerciseMeta; onCl
       )}
     </ScrollView>
   );
+}
+
+// --- Mode-aware set display helpers ---
+
+/** Human-readable summary of a planned set, respecting the item's setMode. */
+export function plannedSetLabel(s: PlannedSet, mode: SetMode): string {
+  if (mode === 'timed') {
+    return `${s.holdSec ?? '?'}s hold${s.eachSide ? ' (each side)' : ''}${s.rpe ? ` @ RPE ${s.rpe}` : ''}`;
+  }
+  if (mode === 'distance') {
+    return `${s.distanceKm ?? '?'} km${s.rpe ? ` @ RPE ${s.rpe}` : ''}`;
+  }
+  return `${s.reps ?? '?'} reps${s.rpe ? ` @ RPE ${s.rpe}` : ''}`;
+}
+
+/** Human-readable summary of a completed set log, respecting its setMode. */
+export function completedSetLabel(l: CompletedSet | SetLogRecord, units: Units): string {
+  const mode = ((l as SetLogRecord).setMode as SetMode | undefined) ?? 'reps';
+  if (mode === 'timed') {
+    const parts = [`${l.holdSec ?? 0}s`];
+    if (l.loadKg) parts.push(`${formatWeight(l.loadKg, units)}`);
+    if (l.eachSide) parts.push('ea. side');
+    if (l.rpe) parts.push(`RPE ${l.rpe}`);
+    return parts.join(' · ');
+  }
+  if (mode === 'distance') {
+    const parts = [`${l.distanceKm ?? 0} km`];
+    if (l.loadKg) parts.push(`${formatWeight(l.loadKg, units)}`);
+    if (l.durationSec) parts.push(`${l.durationSec}s`);
+    if (l.rpe) parts.push(`RPE ${l.rpe}`);
+    return parts.join(' · ');
+  }
+  return `${l.weight ? `${formatWeight(l.weight, units)} × ` : ''}${l.reps ?? 0}`;
+}
+
+/** Build an input placeholder showing the planned target for the current set. */
+function plannedHint(
+  item: SessionItem,
+  setIndex: number,
+  field: 'reps' | 'holdSec' | 'distanceKm',
+  fallback: string,
+): string {
+  const planned = item.plannedSets[setIndex]?.[field];
+  return planned != null ? `${fallback} (${planned})` : fallback;
 }

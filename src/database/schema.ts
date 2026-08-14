@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS session_state (
 );
 
 -- Rich per-set logs for previous performance + future progression (§37).
+-- setMode extension columns (hold_sec, distance_km, load_kg, duration_sec,
+-- each_side, set_mode) are added by MIGRATION_SQL for pre-existing databases.
 CREATE TABLE IF NOT EXISTS set_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id TEXT NOT NULL,
@@ -57,6 +59,22 @@ CREATE TABLE IF NOT EXISTS cardio_logs (
   timestamp INTEGER NOT NULL,
   FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
+`;
+
+/**
+ * Additive migrations for the setMode extension. Each ALTER adds a nullable
+ * column, so it is safe to run against an existing database (created before the
+ * timed/distance set modes existed) and is a no-op for fresh databases after the
+ * columns already exist. SQLite has no IF NOT EXISTS for ADD COLUMN, so the
+ * absence of a column is detected via pragma before running each statement.
+ */
+export const MIGRATION_SQL = `
+ALTER TABLE set_logs ADD COLUMN hold_sec REAL;
+ALTER TABLE set_logs ADD COLUMN distance_km REAL;
+ALTER TABLE set_logs add COLUMN load_kg REAL;
+ALTER TABLE set_logs ADD COLUMN duration_sec REAL;
+ALTER TABLE set_logs ADD COLUMN each_side INTEGER;
+ALTER TABLE set_logs ADD COLUMN set_mode TEXT;
 `;
 
 export interface ProgramRow {
@@ -89,6 +107,12 @@ export interface SetLogRow {
   reps: number;
   rpe: number | null;
   notes: string | null;
+  hold_sec: number | null;
+  distance_km: number | null;
+  load_kg: number | null;
+  duration_sec: number | null;
+  each_side: number | null;
+  set_mode: string | null;
   timestamp: number;
 }
 

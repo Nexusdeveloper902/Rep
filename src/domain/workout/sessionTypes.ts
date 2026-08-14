@@ -1,4 +1,4 @@
-import type { ExerciseWorkoutItem, CardioWorkoutItem } from '@/domain/program/schema';
+import type { ExerciseWorkoutItem, CardioWorkoutItem, SetMode } from '@/domain/program/schema';
 
 /** Session lifecycle states (§32 — must be a state machine). */
 export type SessionState =
@@ -14,13 +14,29 @@ export type SessionState =
 /** Per-item lifecycle within a session. */
 export type SessionItemStatus = 'pending' | 'inProgress' | 'completed' | 'skipped' | 'waiting';
 
-/** A completed set record. Rich data for future progression/PRs (§37). */
+/**
+ * A completed set record. Rich data for future progression/PRs (§37).
+ * The fields populated depend on the parent item's `setMode`:
+ *  - `'reps'`     → `weight` + `reps` (+ optional `rpe`).
+ *  - `'timed'`    → `holdSec` (+ optional `loadKg`, `rpe`). `reps` may be 0.
+ *  - `'distance'` → `distanceKm` + `loadKg` + `durationSec`.
+ */
 export interface CompletedSet {
   setIndex: number;
   weight?: number;
-  reps: number;
+  reps?: number;
   rpe?: number;
   notes?: string;
+  /** Hold duration in seconds (timed mode). */
+  holdSec?: number;
+  /** Distance covered in km (distance mode). */
+  distanceKm?: number;
+  /** Carried/external load in kg (timed weighted-hold or distance carry). */
+  loadKg?: number;
+  /** Time taken in seconds (distance mode). */
+  durationSec?: number;
+  /** Performed each side (timed unilateral holds). */
+  eachSide?: boolean;
   timestamp: number;
 }
 
@@ -69,6 +85,8 @@ export interface SessionItem {
   supersetRound?: number;
   /** For skipped items awaiting equipment. */
   skipReason?: string;
+  /** Measurement mode for this item's sets (defaults to 'reps'). */
+  setMode?: SetMode;
 }
 
 export interface Session {
@@ -99,7 +117,18 @@ export interface Session {
 /** Actions dispatched into the pure engine. */
 export type SessionAction =
   | { type: 'START' }
-  | { type: 'COMPLETE_SET'; weight?: number; reps: number; rpe?: number; notes?: string }
+  | {
+      type: 'COMPLETE_SET';
+      weight?: number;
+      reps?: number;
+      rpe?: number;
+      notes?: string;
+      holdSec?: number;
+      distanceKm?: number;
+      loadKg?: number;
+      durationSec?: number;
+      eachSide?: boolean;
+    }
   | { type: 'SKIP_EXERCISE'; reason?: string }
   | { type: 'MARK_EQUIPMENT_UNAVAILABLE'; reason?: string }
   | { type: 'MARK_EQUIPMENT_AVAILABLE' }

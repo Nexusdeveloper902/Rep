@@ -1,15 +1,17 @@
 import type { SessionRecord, SetLogRecord, ExerciseVolume, WorkoutStats } from '@/database/repositories/types';
 
 /** Epley 1RM estimate in kg (undefined when no weight). */
-export function est1rmKg(weightKg: number | undefined, reps: number): number {
+export function est1rmKg(weightKg: number | undefined, reps: number | undefined): number {
   if (!weightKg || weightKg <= 0) return 0;
-  if (reps <= 1) return weightKg;
-  return weightKg * (1 + reps / 30);
+  const r = reps ?? 1;
+  if (r <= 1) return weightKg;
+  return weightKg * (1 + r / 30);
 }
 
-/** Volume load of a single set in kg. */
-export function setVolumeKg(weightKg: number | undefined, reps: number): number {
-  return (weightKg ?? 0) * reps;
+/** Volume load of a single set in kg. Timed/distance sets have no weight×reps volume. */
+export function setVolumeKg(weightKg: number | undefined, reps: number | undefined): number {
+  if (!weightKg || !reps) return 0;
+  return weightKg * reps;
 }
 
 /**

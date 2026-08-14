@@ -96,4 +96,56 @@ describe('validateProgramDocument', () => {
     expect(r2.ok).toBe(true);
     expect(JSON.stringify(r2.program)).toBe(JSON.stringify(r1.program));
   });
+
+  it('accepts timed setMode with holdSec and round-trips', () => {
+    const doc = JSON.parse(JSON.stringify(validDoc)) as ProgramDocument;
+    (doc.workouts[0].items[0] as any).setMode = 'timed';
+    (doc.workouts[0].items[0] as any).sets = [{ holdSec: 60 }, { holdSec: 45, eachSide: true }];
+    const r = validateProgramDocument(doc);
+    expect(r.ok).toBe(true);
+    const item = r.program!.workouts[0].items[0];
+    expect(item.type === 'exercise' && item.setMode).toBe('timed');
+  });
+
+  it('accepts distance setMode with distanceKm', () => {
+    const doc = JSON.parse(JSON.stringify(validDoc)) as ProgramDocument;
+    (doc.workouts[0].items[0] as any).setMode = 'distance';
+    (doc.workouts[0].items[0] as any).sets = [{ distanceKm: 0.05 }, { distanceKm: 0.05 }];
+    const r = validateProgramDocument(doc);
+    expect(r.ok).toBe(true);
+  });
+
+  it('rejects timed set missing holdSec', () => {
+    const doc = JSON.parse(JSON.stringify(validDoc)) as ProgramDocument;
+    (doc.workouts[0].items[0] as any).setMode = 'timed';
+    (doc.workouts[0].items[0] as any).sets = [{ reps: 1 }];
+    const r = validateProgramDocument(doc);
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('holdSec is required'))).toBe(true);
+  });
+
+  it('rejects distance set missing distanceKm', () => {
+    const doc = JSON.parse(JSON.stringify(validDoc)) as ProgramDocument;
+    (doc.workouts[0].items[0] as any).setMode = 'distance';
+    (doc.workouts[0].items[0] as any).sets = [{ reps: 1 }];
+    const r = validateProgramDocument(doc);
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('distanceKm is required'))).toBe(true);
+  });
+
+  it('rejects reps-mode set missing reps', () => {
+    const doc = JSON.parse(JSON.stringify(validDoc)) as ProgramDocument;
+    (doc.workouts[0].items[0] as any).setMode = 'reps';
+    (doc.workouts[0].items[0] as any).sets = [{ holdSec: 30 }];
+    const r = validateProgramDocument(doc);
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('reps is required'))).toBe(true);
+  });
+
+  it('accepts a legacy document with no setMode fields (backward compatible)', () => {
+    // The base validDoc already has no setMode anywhere; it must still pass.
+    const r = validateProgramDocument(validDoc);
+    expect(r.ok).toBe(true);
+    expect(r.errors).toHaveLength(0);
+  });
 });

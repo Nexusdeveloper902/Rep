@@ -171,3 +171,75 @@ describe('WorkoutEngine', () => {
     expect(next).not.toBe(s);
   });
 });
+
+describe('WorkoutEngine setMode', () => {
+  // A plank modeled as timed, a carry as distance, and a legacy bench with no
+  // setMode (must default to 'reps' and behave as before).
+  const mixedWorkout: Workout = {
+    id: 'mixed',
+    name: 'Mixed',
+    items: [
+      { type: 'exercise', id: 'p', exerciseId: 'plank', setMode: 'timed', sets: [{ holdSec: 45 }, { holdSec: 45 }], restSec: 30 },
+      { type: 'exercise', id: 'c', exerciseId: 'carry', setMode: 'distance', sets: [{ distanceKm: 0.05 }], restSec: 60 },
+      { type: 'exercise', id: 'b', exerciseId: 'bench', sets: [{ reps: 8 }], restSec: 90 },
+    ],
+  };
+
+  it('expands setMode onto session items, defaulting to reps', () => {
+    const s = startSession('prog', mixedWorkout);
+    expect(s.items[0].setMode).toBe('timed');
+    expect(s.items[1].setMode).toBe('distance');
+    expect(s.items[2].setMode).toBe('reps');
+  });
+
+  it('logs a timed set with holdSec and optional load (no reps/weight)', () => {
+    let s = startSession('prog', mixedWorkout);
+    s = reduce(s, { type: 'COMPLETE_SET', holdSec: 50, loadKg: 20, eachSide: false, rpe: 7 });
+    const cs = s.items[0].completedSets[0];
+    expect(cs.holdSec).toBe(50);
+    expect(cs.loadKg).toBe(20);
+    expect(cs.reps).toBeUndefined();
+    expect(cs.weight).toBeUndefined();
+    expect(cs.rpe).toBe(7);
+    expect(cs.eachSide).toBe(false);
+  });
+
+  it('logs a distance set with distanceKm, load, and duration', () => {
+    let s = startSession('prog', mixedWorkout);
+    s = reduce(s, { type: 'COMPLETE_SET', reps: 0, weight: 0 }); // skip plank set 1
+    s = reduce(s, { type: 'COMPLETE_SET', holdSec: 45 }); // plank set 2 → item done
+    // now on carry
+    s = reduce(s, { type: 'COMPLETE_SET', distanceKm: 0.05, loadKg: 32, durationSec: 28 });
+    const carry = s.items.find((i) => i.exerciseId === 'carry')!;
+    const cs = carry.completedSets[0];
+    expect(cs.distanceKm).toBe(0.05);
+    expect(cs.loadKg).toBe(32);
+    expect(cs.durationSec).toBe(28);
+    expect(cs.reps).toBeUndefined();
+  });
+
+  it('legacy reps set (no setMode) still works as before', () => {
+    let s = startSession('prog', mixedWorkout);
+    s = reduce(s, { type: 'COMPLETE_SET', reps: 0, weight: 0 }); // plank set 1
+    s = reduce(s, { type: 'COMPLETE_SET', holdSec: 45 }); // plank set 2
+    s = reduce(s, { type: 'COMPLETE_SET', distanceKm: 0.05 }); // carry
+    // now on bench
+    s = reduce(s, { type: 'COMPLETE_SET', reps: 8, weight: 60 });
+    const bench = s.items.find((i) => i.exerciseId === 'bench')!;
+    expect(bench.completedSets[0].reps).toBe(8);
+    expect(bench.completedSets[0].weight).toBe(60);
+    expect(bench.setMode).toBe('reps');
+  });
+
+  it('summarize counts timed/distance sets as completed sets', () => {
+    let s = startSession('prog', mixedWorkout);
+    s = reduce(s, { type: 'COMPLETE_SET', holdSec: 45 }); // plank 1
+    s = reduce(s, { type: 'COMPLETE_SET', holdSec: 45 }); // plank 2
+    s = reduce(s, { type: 'COMPLETE_SET', distanceKm: 0.05 }); // carry
+    s = reduce(s, { type: 'COMPLETE_SET', reps: 8, weight: 60 }); // bench
+    s = reduce(s, { type: 'FINISH_WORKOUT' });
+    const sum = summarize(s);
+    expect(sum.setsCompleted).toBe(4);
+    expect(sum.setsTotal).toBe(4);
+  });
+});
