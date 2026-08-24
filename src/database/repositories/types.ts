@@ -27,9 +27,21 @@ export interface SetLogRecord {
   exerciseId: string;
   setIndex: number;
   weight?: number;
-  reps: number;
+  reps?: number;
   rpe?: number;
   notes?: string;
+  /** Hold duration in seconds (timed-mode sets). */
+  holdSec?: number;
+  /** Distance covered in km (distance-mode sets). */
+  distanceKm?: number;
+  /** Carried/external load in kg (timed weighted-hold or distance carry). */
+  loadKg?: number;
+  /** Time taken in seconds (distance-mode sets). */
+  durationSec?: number;
+  /** Performed each side (timed unilateral holds). */
+  eachSide?: boolean;
+  /** Measurement mode carried through for display; defaults to 'reps'. */
+  setMode?: string;
   timestamp: number;
 }
 

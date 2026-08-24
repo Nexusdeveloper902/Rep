@@ -76,18 +76,55 @@ function semanticChecks(doc: ProgramDocument): string[] {
     }
   }
 
-  // Rep values sanity (numeric strings acceptable).
+  // Per-set sanity: fields must match the item's setMode (defaults to 'reps').
   for (const w of doc.workouts) {
     for (const item of w.items) {
       if (item.type === 'exercise') {
+        const mode = item.setMode ?? 'reps';
         for (let i = 0; i < item.sets.length; i++) {
-          const reps = item.sets[i].reps;
-          if (typeof reps === 'number' && reps < 1) {
-            errors.push(`Workout "${w.name}", set #${i + 1}: reps must be ≥ 1.`);
+          const set = item.sets[i];
+          if (mode === 'reps') {
+            if (set.reps === undefined) {
+              errors.push(`Workout "${w.name}", set #${i + 1}: reps is required for a reps-mode exercise.`);
+            } else if (typeof set.reps === 'number' && set.reps < 1) {
+              errors.push(`Workout "${w.name}", set #${i + 1}: reps must be ≥ 1.`);
+            }
+            if (set.holdSec !== undefined || set.distanceKm !== undefined) {
+              errors.push(`Workout "${w.name}", set #${i + 1}: holdSec/distanceKm are not valid for reps-mode exercises.`);
+            }
+          } else if (mode === 'timed') {
+            if (set.holdSec === undefined) {
+              errors.push(`Workout "${w.name}", set #${i + 1}: holdSec is required for a timed-mode exercise.`);
+            }
+            if (set.reps !== undefined || set.distanceKm !== undefined) {
+              errors.push(`Workout "${w.name}", set #${i + 1}: reps/distanceKm are not valid for timed-mode exercises.`);
+            }
+          } else if (mode === 'distance') {
+            if (set.distanceKm === undefined) {
+              errors.push(`Workout "${w.name}", set #${i + 1}: distanceKm is required for a distance-mode exercise.`);
+            }
+            if (set.reps !== undefined || set.holdSec !== undefined) {
+              errors.push(`Workout "${w.name}", set #${i + 1}: reps/holdSec are not valid for distance-mode exercises.`);
+            }
           }
         }
         if (item.restSec !== undefined && item.restSec > 600) {
           errors.push(`Workout "${w.name}": restSec must be ≤ 600.`);
+        }
+      } else if (item.type === 'superset') {
+        for (let j = 0; j < item.exercises.length; j++) {
+          const ex = item.exercises[j];
+          const mode = ex.setMode ?? 'reps';
+          for (let i = 0; i < ex.sets.length; i++) {
+            const set = ex.sets[i];
+            if (mode === 'reps' && set.reps === undefined) {
+              errors.push(`Superset "${item.id}" exercise #${j + 1}, set #${i + 1}: reps is required for reps-mode.`);
+            } else if (mode === 'timed' && set.holdSec === undefined) {
+              errors.push(`Superset "${item.id}" exercise #${j + 1}, set #${i + 1}: holdSec is required for timed-mode.`);
+            } else if (mode === 'distance' && set.distanceKm === undefined) {
+              errors.push(`Superset "${item.id}" exercise #${j + 1}, set #${i + 1}: distanceKm is required for distance-mode.`);
+            }
+          }
         }
       }
     }

@@ -19,9 +19,32 @@ export const ExerciseMetaSchema = z.object({
 export type ExerciseMeta = z.infer<typeof ExerciseMetaSchema>;
 
 const PlannedSetSchema = z.object({
-  reps: z.union([z.string(), z.number()]),
+  /** Target reps for a reps-mode set. Absent for timed/distance sets. */
+  reps: z.union([z.string(), z.number()]).optional(),
+  /** Optional RPE target (1–10). */
   rpe: z.number().min(1).max(10).optional(),
+  /** Target hold duration in seconds for a timed set (plank, wall sit, stretch hold). */
+  holdSec: z.number().min(1).max(3600).optional(),
+  /** Target distance in km for a distance set (farmer's carry, shuttle run). */
+  distanceKm: z.number().min(0).optional(),
+  /** Unilateral hold performed each side (timed mode). */
+  eachSide: z.boolean().optional(),
 });
+export type PlannedSet = z.infer<typeof PlannedSetSchema>;
+
+/**
+ * How sets for an exercise are measured and logged.
+ * - `'reps'`      — weighted reps (the default; original behavior). Existing
+ *                   programs that omit `setMode` are treated as `'reps'`.
+ * - `'timed'`     — isometric / hold exercises (plank, wall sit, hollow hold).
+ *                   A "set" logs a hold duration (sec), optionally a load
+ *                   (weighted plank) and an RPE. No reps.
+ * - `'distance'`  — distance-based sets (farmer's carry, sled push, shuttle).
+ *                   A "set" logs distance (km), an optional carried load (kg),
+ *                   and the time taken (sec).
+ */
+export const SET_MODES = ['reps', 'timed', 'distance'] as const;
+export type SetMode = (typeof SET_MODES)[number];
 
 /** Resistance exercise item within a workout. */
 export const ExerciseWorkoutItemSchema = z.object({
@@ -32,6 +55,8 @@ export const ExerciseWorkoutItemSchema = z.object({
   restSec: z.number().int().min(0).max(600).optional(),
   notes: z.string().optional(),
   equipmentOverride: z.string().optional(),
+  /** Measurement mode for all sets of this exercise. Defaults to `'reps'`. */
+  setMode: z.enum(SET_MODES).optional(),
 });
 export type ExerciseWorkoutItem = z.infer<typeof ExerciseWorkoutItemSchema>;
 
@@ -39,6 +64,8 @@ const SupersetExerciseSchema = z.object({
   exerciseId: z.string().min(1),
   sets: z.array(PlannedSetSchema).min(1),
   restSec: z.number().int().min(0).max(600).optional(),
+  /** Measurement mode for this superset exercise's sets. Defaults to `'reps'`. */
+  setMode: z.enum(SET_MODES).optional(),
 });
 
 /** Superset: N exercises performed back-to-back, repeated for `rounds` rounds. */

@@ -76,7 +76,8 @@ export const SAMPLE_PROGRAM: ProgramDocument = {
       estimatedDurationMin: 40,
       items: [
         { type: 'cardio', id: 'cc-cardio', cardioType: 'treadmill', durationMin: 20, intensity: 'moderate', notes: 'Incline 2%.' },
-        { type: 'exercise', id: 'cc-plank', exerciseId: 'plank', sets: [{ reps: 1 }], restSec: 45, notes: 'Hold 45s.' },
+        { type: 'exercise', id: 'cc-plank', exerciseId: 'plank', setMode: 'timed', sets: [{ holdSec: 45 }, { holdSec: 45 }, { holdSec: 30 }], restSec: 45 },
+        { type: 'exercise', id: 'cc-carry', exerciseId: 'farmers-carry', setMode: 'distance', sets: [{ distanceKm: 0.05 }, { distanceKm: 0.05 }], restSec: 60, notes: 'Heavy dumbbells, upright posture.' },
         { type: 'exercise', id: 'cc-hang', exerciseId: 'hanging-leg-raise', sets: [{ reps: 12 }, { reps: 12 }], restSec: 60 },
       ],
     },
@@ -105,7 +106,8 @@ export const SAMPLE_PROGRAM: ProgramDocument = {
     { id: 'barbell-curl', name: 'Barbell Curl', equipment: 'Barbell', targetMuscles: ['Biceps'] },
     { id: 'face-pull', name: 'Face Pull', equipment: 'Cable', targetMuscles: ['Rear delts'] },
     { id: 'seated-row', name: 'Seated Cable Row', equipment: 'Cable', targetMuscles: ['Back'] },
-    { id: 'plank', name: 'Plank', equipment: 'Bodyweight', targetMuscles: ['Core'] },
+    { id: 'plank', name: 'Plank', equipment: 'Bodyweight', targetMuscles: ['Core'], tips: ['Brace your abs, keep a straight line from head to heels.'] },
     { id: 'hanging-leg-raise', name: 'Hanging Leg Raise', equipment: 'Bodyweight', targetMuscles: ['Core'] },
+    { id: 'farmers-carry', name: "Farmer's Carry", equipment: 'Dumbbells', targetMuscles: ['Core', 'Forearms', 'Traps'], tips: ['Keep shoulders down and back, walk with short quick steps.'] },
   ],
 };

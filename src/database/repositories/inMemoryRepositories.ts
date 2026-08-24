@@ -68,6 +68,12 @@ export class InMemorySessionRepository implements ISessionRepository {
           reps: cs.reps,
           rpe: cs.rpe,
           notes: cs.notes,
+          holdSec: cs.holdSec,
+          distanceKm: cs.distanceKm,
+          loadKg: cs.loadKg,
+          durationSec: cs.durationSec,
+          eachSide: cs.eachSide,
+          setMode: item.setMode,
           timestamp: cs.timestamp,
         });
       }

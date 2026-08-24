@@ -7,14 +7,54 @@ import { SCHEMA_SQL } from '@/database/schema';
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
+/** Add setMode extension columns to set_logs if absent. Idempotent per column. */
+async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
+  const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(set_logs)');
+  const names = new Set(cols.map((c) => c.name));
+  const wanted: Record<string, string> = {
+    hold_sec: 'REAL',
+    distance_km: 'REAL',
+    load_kg: 'REAL',
+    duration_sec: 'REAL',
+    each_side: 'INTEGER',
+    set_mode: 'TEXT',
+  };
+  for (const [col, type] of Object.entries(wanted)) {
+    if (!names.has(col)) {
+      await db.execAsync(`ALTER TABLE set_logs ADD COLUMN ${col} ${type}`);
+    }
+  }
+}
+
 async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (!dbPromise) {
     dbPromise = SQLite.openDatabaseAsync('gym_companion.db').then(async (db) => {
       await db.execAsync(SCHEMA_SQL);
+      await migrate(db);
       return db;
     });
   }
   return dbPromise;
+}
+
+/** Map a set_logs row (snake_case) to a SetLogRecord. */
+function rowToLog(r: any): SetLogRecord {
+  return {
+    sessionId: r.session_id,
+    exerciseId: r.exercise_id,
+    setIndex: r.set_index,
+    weight: r.weight ?? undefined,
+    reps: r.reps ?? undefined,
+    rpe: r.rpe ?? undefined,
+    notes: r.notes ?? undefined,
+    holdSec: r.hold_sec ?? undefined,
+    distanceKm: r.distance_km ?? undefined,
+    loadKg: r.load_kg ?? undefined,
+    durationSec: r.duration_sec ?? undefined,
+    eachSide: r.each_side === 1 ? true : r.each_side === 0 ? false : undefined,
+    setMode: r.set_mode ?? undefined,
+    timestamp: r.timestamp,
+  };
 }
 
 export class SQLiteProgramRepository implements IProgramRepository {
@@ -87,8 +127,12 @@ export class SQLiteSessionRepository implements ISessionRepository {
     for (const item of session.items) {
       for (const cs of item.completedSets) {
         await db.runAsync(
-          'INSERT INTO set_logs (session_id, exercise_id, set_index, weight, reps, rpe, notes, timestamp) VALUES (?,?,?,?,?,?,?,?)',
-          session.id, item.exerciseId ?? '', cs.setIndex, cs.weight ?? null, cs.reps, cs.rpe ?? null, cs.notes ?? null, cs.timestamp,
+          `INSERT INTO set_logs (session_id, exercise_id, set_index, weight, reps, rpe, notes, hold_sec, distance_km, load_kg, duration_sec, each_side, set_mode, timestamp)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          session.id, item.exerciseId ?? '', cs.setIndex,
+          cs.weight ?? null, cs.reps ?? 0, cs.rpe ?? null, cs.notes ?? null,
+          cs.holdSec ?? null, cs.distanceKm ?? null, cs.loadKg ?? null, cs.durationSec ?? null,
+          cs.eachSide ? 1 : null, item.setMode ?? 'reps', cs.timestamp,
         );
       }
       if (item.kind === 'cardio' && item.cardioActual) {
@@ -118,13 +162,14 @@ export class SQLiteSessionRepository implements ISessionRepository {
     const items: SessionItem[] = [];
     const byExercise = new Map<string, SessionItem>();
     for (const sl of setRows) {
+      const log = rowToLog(sl);
       let item = byExercise.get(sl.exercise_id);
       if (!item) {
-        item = { id: sl.exercise_id, kind: 'exercise', exerciseId: sl.exercise_id, status: 'completed', plannedSets: [], completedSets: [] } as SessionItem;
+        item = { id: sl.exercise_id, kind: 'exercise', exerciseId: sl.exercise_id, status: 'completed', plannedSets: [], setMode: log.setMode as any, completedSets: [] } as SessionItem;
         byExercise.set(sl.exercise_id, item);
         items.push(item);
       }
-      item.completedSets.push({ setIndex: sl.set_index, weight: sl.weight ?? undefined, reps: sl.reps, rpe: sl.rpe ?? undefined, notes: sl.notes ?? undefined, timestamp: sl.timestamp });
+      item.completedSets.push(log);
     }
     const record: SessionRecord = {
       id: r.id, programId: r.program_id, workoutId: r.workout_id, isExtra: r.is_extra === 1, label: r.label, date: r.date_iso, startTime: r.start_time, endTime: r.end_time ?? undefined, state: r.state, summary: r.summary_json ? JSON.parse(r.summary_json) : undefined,
@@ -141,9 +186,7 @@ export class SQLiteSessionRepository implements ISessionRepository {
     if (sessionRow.length === 0) return [];
     const sid = sessionRow[0].session_id;
     const rows = await db.getAllAsync<any>('SELECT * FROM set_logs WHERE session_id = ? AND exercise_id = ? ORDER BY set_index', sid, exerciseId);
-    return rows.map((r) => ({
-      sessionId: r.session_id, exerciseId: r.exercise_id, setIndex: r.set_index, weight: r.weight ?? undefined, reps: r.reps, rpe: r.rpe ?? undefined, notes: r.notes ?? undefined, timestamp: r.timestamp,
-    }));
+    return rows.map(rowToLog);
   }
   async bestSet(exerciseId: string): Promise<SetLogRecord | null> {
     const db = await getDb();
@@ -154,8 +197,7 @@ export class SQLiteSessionRepository implements ISessionRepository {
       exerciseId,
     );
     if (rows.length === 0) return null;
-    const r = rows[0];
-    return { sessionId: r.session_id, exerciseId: r.exercise_id, setIndex: r.set_index, weight: r.weight ?? undefined, reps: r.reps, rpe: r.rpe ?? undefined, notes: r.notes ?? undefined, timestamp: r.timestamp };
+    return rowToLog(rows[0]);
   }
   async stats(): Promise<WorkoutStats> {
     const db = await getDb();
@@ -163,9 +205,7 @@ export class SQLiteSessionRepository implements ISessionRepository {
       id: r.id, programId: r.program_id, workoutId: r.workout_id, isExtra: r.is_extra === 1, label: r.label, date: r.date_iso, startTime: r.start_time, endTime: r.end_time ?? undefined, state: r.state, summary: r.summary_json ? JSON.parse(r.summary_json) : undefined,
     }));
     const setRows = await db.getAllAsync<any>(`SELECT l.* FROM set_logs l JOIN sessions s ON s.id = l.session_id WHERE s.state = 'WorkoutComplete'`);
-    const allLogs: SetLogRecord[] = setRows.map((r) => ({
-      sessionId: r.session_id, exerciseId: r.exercise_id, setIndex: r.set_index, weight: r.weight ?? undefined, reps: r.reps, rpe: r.rpe ?? undefined, notes: r.notes ?? undefined, timestamp: r.timestamp,
-    }));
+    const allLogs: SetLogRecord[] = setRows.map(rowToLog);
     // Cardio minutes: sum actual durations from cardio_logs of completed sessions.
     const cardioRow = await db.getAllAsync<{ total: number | null }>(
       `SELECT COALESCE(SUM(c.duration_min), 0) as total FROM cardio_logs c JOIN sessions s ON s.id = c.session_id WHERE s.state = 'WorkoutComplete'`,

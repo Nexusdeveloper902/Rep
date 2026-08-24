@@ -7,6 +7,7 @@ import { useHistoryStore } from '@/stores/useHistoryStore';
 import { usePreferencesStore } from '@/stores/usePreferencesStore';
 import { repos } from '@/lib/repositories';
 import { formatWeight } from '@/lib/units';
+import { completedSetLabel } from '@/features/sessions/ActiveWorkout';
 import { Card, Pill, SecondaryButton } from '@/components/ui';
 import { styles, AppColors } from '@/components/styles';
 import { friendlyDate } from '@/lib/datetime';
@@ -44,7 +45,7 @@ export default function HistoryScreen() {
             <Text style={styles.h3}>{item.label ?? item.exerciseId}</Text>
             {item.completedSets.map((cs, i) => (
               <View key={i} style={[styles.rowBetween, { paddingVertical: 4 }]}>
-                <Text style={styles.body}>Set {cs.setIndex + 1}: {cs.weight ? `${formatWeight(cs.weight, units)} × ` : ''}{cs.reps} reps</Text>
+                <Text style={styles.body}>Set {cs.setIndex + 1}: {completedSetLabel(cs, units)}</Text>
                 {cs.rpe ? <Text style={styles.muted}>RPE {cs.rpe}</Text> : null}
               </View>
             ))}
